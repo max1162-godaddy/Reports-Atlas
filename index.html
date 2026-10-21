@@ -885,7 +885,7 @@ const RULES = {
         'Interactive Orders Reconciliation Report — Tip sum', orr.totals.tip,
         'Interactive Transactions — Tip amount', itr.totals.total_tips,
         'These totals are designed to match. First verify both reports cover the same date range. If they do and totals still do not match, escalate.'),
-      orr.totals.authorized_amount > 0
+      orr.totals.authorized_amount !== null
         ? mkChk('Authorized amount vs Payment card captured',
             'Interactive Orders Reconciliation Report — Authorized amount', orr.totals.authorized_amount,
             'Interactive Transactions — Payment card captured amount', itr.totals.payment_card_captured,
@@ -2011,15 +2011,15 @@ var REPORT_GUIDE = {
     ],
     interactive_transactions_report: [
       { kind: 'warn', msg: '"Payment card captured amount" is not in the Default Columns export.',
-        detail: 'The default export has 10 columns only and does not include "Payment card captured amount", which is required to reconcile against the Transactions Report. It also omits Approval code, Order number, Transaction type, and Tender type. The merchant will need to re-export with all columns selected.' },
+        detail: 'The default export has 15 columns and does not include "Payment card captured amount", "Order amount", "Surcharge amount", or "Refund amount" — all required for payment reconciliation. The merchant will need to re-export with All Columns selected.' },
       { kind: 'warn', msg: 'For cash transactions, "Total amount" includes any change given back to the customer.',
         detail: 'Do not use "Total amount" for payment reconciliation. Use "Payment card captured amount" instead.' },
       { kind: 'info', msg: 'This report includes Declined and Voided rows.',
-        detail: 'The Transactions Report counts only completed transactions. A difference between the two reports may be explained by Declined or Voided rows in this CSV.' },
+        detail: 'The Legacy Transactions Report counts only completed transactions. Declined and Voided rows appear in this report but not in the Legacy Transactions Report. Their payment and tip amounts are $0.00 — they affect row counts, not totals.' },
       { kind: 'info', msg: '"Payment card captured amount" covers all payment types, including cash.',
         detail: 'Despite its name, this column reflects the payment amount for all transactions — card and cash. Use this column for payment reconciliation.' },
       { kind: 'info', msg: '"Tip amount" is compared against the Tips Report.',
-        detail: 'The sum of the Tip amount column is compared to Total Tips Collected in the Tips Report. A difference may be explained by Declined or Voided rows with non-zero tip values.' },
+        detail: 'The sum of the Tip amount column is compared to Total Tips Collected in the Tips Report. Declined and Voided rows carry $0.00 tip amounts and do not affect this total.' },
     ],
     payout_report: [
       { kind: 'warn', msg: 'This report uses payout initiation date, not transaction date.',
@@ -2059,7 +2059,7 @@ var REPORT_GUIDE = {
       { kind: 'warn', msg: 'This report uses Order ID, not Transaction ID.',
         detail: 'The Orders Report cannot be matched row-by-row to the Transactions or Payout reports because they use different ID systems.' },
       { kind: 'info', msg: 'The Interactive Orders Reconciliation Report is a more complete version of this data.',
-        detail: 'It includes tips, payment card captured amounts, taxes, and discounts. Its Order total matches the Orders Report. Its Tax column matches the Taxes Report. Like all Orders-family reports, it is not designed to match the Transactions Report — Order total excludes tips and surcharges.' },
+        detail: 'It includes tips, payment card captured amounts, taxes, and discounts. Its Order total matches the Orders Report and also matches Order amount in the Interactive Transactions Report. Its Tax column matches the Taxes Report. For full payment totals including tips and surcharges, use the Transactions Report.' },
     ],
     tax_report: [
       { kind: 'info', msg: 'Tips do not appear in this report.',
@@ -2075,11 +2075,13 @@ var REPORT_GUIDE = {
       { kind: 'info', msg: '"Order total" matches Total Sales in the Orders Report for the same period.',
         detail: 'Order total excludes tips and surcharges. For the same date range, the sum of Order total across all orders should equal Orders Report Total Sales.' },
       { kind: 'info', msg: '"Tax" matches Total Tax in the Taxes Report for the same period.' },
+      { kind: 'info', msg: '"Order total" matches "Order amount" in the Interactive Transactions Report.',
+        detail: 'For the same date range, the sum of Order total in this report equals the sum of Order amount in the Interactive Transactions Report. Both exclude tips and surcharges.' },
       { kind: 'warn',
         msg: '"Total Paid" reflects both authorized and captured amounts for some orders — do not use it for reconciliation.',
         detail: 'For orders settled via next-day batch, both the authorization and the capture are included in "Total Paid," causing the amount to appear twice. Use "Authorized amount" from the All Columns export instead.' },
-      { kind: 'warn', msg: 'This report will not match the Transactions Report.',
-        detail: 'Order totals and transaction totals are calculated differently. "Order total" excludes tips and surcharges; the Transactions Report "Total Payments" includes them. In addition, this report uses the date an order was placed, while the Transactions Report uses the transaction date — these may fall on different calendar days.' },
+      { kind: 'warn', msg: 'Full payment totals do not match the Legacy Transactions Report.',
+        detail: '"Order total" excludes tips and surcharges; the Legacy Transactions Report "Total Payments" includes them. In addition, this report uses the date an order was placed, while the Transactions Report uses the transaction date — these may fall on different calendar days.' },
       { kind: 'warn', msg: 'This report has no shared identifier with the Transactions Report.',
         detail: 'Orders Reports use a sequential Order # that does not appear in any Transactions Report. Row-level matching between these two report families is not possible.' },
     ],
@@ -2089,6 +2091,8 @@ var REPORT_GUIDE = {
       { kind: 'info', msg: 'This report includes fulfillment detail not available in other reports.',
         detail: 'Fulfillment mode, fulfillment status, and order status are unique to this report.' },
       { kind: 'info', msg: '"Order total" matches Total Sales in the Orders Report for the same period.' },
+      { kind: 'info', msg: '"Order total" matches "Order amount" in the Interactive Transactions Report.',
+        detail: 'For the same date range, the sum of Order total in this report equals the sum of Order amount in the Interactive Transactions Report.' },
     ],
     orders_summary_report: [
       { kind: 'warn', msg: 'This report is for analytics only — it cannot be used for financial reconciliation.',
@@ -2445,11 +2449,11 @@ var REPORT_GUIDE = {
         <span class="sc-title">"My order totals don't match my transaction totals"</span>
       </summary>
       <div class="sc-body">
-        <div class="sc-why">Orders-family reports and Transactions-family reports are not designed to match each other. Order total excludes tips and surcharges; the Transactions Report includes them. These two report families measure different things.</div>
+        <div class="sc-why"><strong>Order total</strong> (Orders-family) and <strong>Order amount</strong> (Interactive Transactions Report) are designed to match — they both represent the order subtotal before tips and surcharges. However, the full payment totals across these families differ by design: Order total excludes tips and surcharges, which the Legacy Transactions Report includes.</div>
         <div class="sc-steps-label">What to check</div>
         <div class="sc-steps">
-          <div class="sc-step"><span class="sc-step-n">1.</span><span>Confirm which reports are being compared. If it is an Orders-family report (Orders Report, Interactive Orders, Interactive Orders Reconciliation) vs. a Transactions-family report (Transactions Report, Interactive Transactions), the difference is expected — not an error.</span></div>
-          <div class="sc-step"><span class="sc-step-n">2.</span><span>Order total = subtotal − discounts + fees + tax. It does <strong>not</strong> include tips or surcharges.</span></div>
+          <div class="sc-step"><span class="sc-step-n">1.</span><span><strong>Order total vs. Order amount (Interactive Transactions):</strong> these are designed to match for the same date range. If they don't, first verify the date ranges are identical, then escalate.</span></div>
+          <div class="sc-step"><span class="sc-step-n">2.</span><span><strong>Any Orders-family total vs. Legacy Transactions "Total Payments":</strong> these will not match — Total Payments includes tips and surcharges that Order total excludes. This is expected and not an error.</span></div>
           <div class="sc-step"><span class="sc-step-n">3.</span><span>These families cannot be matched row by row — they use different ID systems (Order # vs. Transaction ID). Use Orders-family reports for order detail, and Transactions-family reports for payment reconciliation.</span></div>
         </div>
       </div>
@@ -2466,7 +2470,7 @@ var REPORT_GUIDE = {
         <div class="sc-steps-label">What to check</div>
         <div class="sc-steps">
           <div class="sc-step"><span class="sc-step-n">1.</span><span>Identify which two reports are being compared.</span></div>
-          <div class="sc-step"><span class="sc-step-n">2.</span><span><strong>Tips Report vs. Transactions Report or Interactive Transactions Report:</strong> these both use transaction date and should match for the same period. A small remaining difference may be caused by Voided or Declined rows in the Interactive Transactions Report that have a non-zero tip value.</span></div>
+          <div class="sc-step"><span class="sc-step-n">2.</span><span><strong>Tips Report vs. Transactions Report or Interactive Transactions Report:</strong> these both use transaction date and should match for the same period. Voided and Declined rows in the Interactive Transactions Report carry $0.00 tip amounts and do not affect this total.</span></div>
           <div class="sc-step"><span class="sc-step-n">3.</span><span><strong>Tips Report vs. Interactive Payouts Report:</strong> these will not match for the same calendar period. The Interactive Payouts Report groups tips by payout initiation date, not transaction date.</span></div>
         </div>
       </div>
